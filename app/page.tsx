@@ -37,6 +37,7 @@ export default function Home() {
     error?: string
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [demoMode, setDemoMode] = useState(false)
   const lastSubmission = useRef<{
     inputMode: InputMode
     pdfText?: string
@@ -129,6 +130,7 @@ export default function Home() {
                 } else if (event.type === 'complete') {
                   setReport(event.data.report)
                   setSlackResult(event.data.slackResult)
+                  if (event.data.demoMode) setDemoMode(true)
                   setView('results')
                 } else if (event.type === 'error') {
                   setError(event.data.error)
@@ -164,6 +166,12 @@ export default function Home() {
 
   return (
     <>
+      {demoMode && view !== 'input' && (
+        <div className="max-w-5xl mx-auto mb-6 bg-accent/10 border border-accent/20 rounded-card px-4 py-3 text-accent text-sm text-center animate-fade-in">
+          Demo Mode — Using mock data. Set <code className="bg-accent/10 px-1.5 py-0.5 rounded text-xs">ANTHROPIC_API_KEY</code> in <code className="bg-accent/10 px-1.5 py-0.5 rounded text-xs">.env.local</code> for live AI research.
+        </div>
+      )}
+
       {view === 'input' && (
         <div className="animate-fade-in">
           <UploadForm onSubmit={runAgent} />

@@ -7,6 +7,13 @@ import {
 } from '@/lib/anthropic'
 import { sendToSlack } from '@/lib/slack'
 import { generatePDFBuffer } from '@/lib/pdf-export'
+import {
+  isDemoMode,
+  isSlackConfigured,
+  mockParseInput,
+  mockResearch,
+  mockEmailSequences,
+} from '@/lib/mock-data'
 import { ClientProfile, FullReport, AgentStage } from '@/types'
 
 export const maxDuration = 120
@@ -20,6 +27,7 @@ function createSSEMessage(
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
+  const demo = isDemoMode()
 
   const body = await request.json()
   const {
@@ -59,15 +67,41 @@ export async function POST(request: NextRequest) {
         const timestamp = new Date().toISOString()
 
         // Stage 1: Parse input
-        updateStage('parsing', 'active', 'Processing onboarding data...')
+        updateStage(
+          'parsing',
+          'active',
+          demo
+            ? 'Demo mode — using mock data...'
+            : 'Processing onboarding data...'
+        )
 
         let profile: ClientProfile
 
-        if (inputMode === 'pdf' && pdfText) {
+        if (demo) {
+          // Demo mode: build profile from form data directly
+          const formProfile: Partial<ClientProfile> = {
+            companyName: companyName || '',
+            industry: industry || '',
+            whatTheyDo: whatTheyDo || '',
+            icp: icp || '',
+            offer: offer || '',
+            competitors: competitors
+              ? competitors
+                  .split(',')
+                  .map((c: string) => c.trim())
+                  .filter(Boolean)
+              : [],
+            tonePreference: tonePreference || 'Professional',
+            additionalNotes: additionalNotes || '',
+            slackChannel: slackChannel || '',
+          }
+          profile = await mockParseInput(formProfile)
+        } else if (inputMode === 'pdf' && pdfText) {
           profile = await parseAndStructureInput(pdfText, (_, preview) => {
             send('stage-preview', { stage: 'parsing', preview })
           })
-          profile.slackChannel = slackChannel || process.env.SLACK_CHANNEL_ID || ''
+          profile.slackChannel =
+            slackChannel || process.env.SLACK_CHANNEL_ID || ''
         } else {
           profile = {
             companyName: companyName || '',
@@ -83,7 +117,8 @@ export async function POST(request: NextRequest) {
               : [],
             tonePreference: tonePreference || 'Professional',
             additionalNotes: additionalNotes || '',
-            slackChannel: slackChannel || process.env.SLACK_CHANNEL_ID || '',
+            slackChannel:
+              slackChannel || process.env.SLACK_CHANNEL_ID || '',
           }
         }
 
@@ -93,12 +128,16 @@ export async function POST(request: NextRequest) {
         updateStage(
           'researching',
           'active',
-          'Launching deep industry research...'
+          demo
+            ? 'Simulating industry research...'
+            : 'Launching deep industry research...'
         )
 
-        const research = await runDeepResearch(profile, (_, preview) => {
-          send('stage-preview', { stage: 'researching', preview })
-        })
+        const research = demo
+          ? await mockResearch(profile)
+          : await runDeepResearch(profile, (_, preview) => {
+              send('stage-preview', { stage: 'researching', preview })
+            })
 
         updateStage('researching', 'complete', 'Research complete')
 
@@ -108,7 +147,6 @@ export async function POST(request: NextRequest) {
           'active',
           'Synthesising ICP profile from research...'
         )
-        // ICP is built as part of research; mark complete
         updateStage('building-icp', 'complete', 'ICP profile built')
 
         // Stage 4: Competitor analysis
@@ -117,7 +155,6 @@ export async function POST(request: NextRequest) {
           'active',
           'Mapping competitor positioning...'
         )
-        // Competitor analysis is part of research stage
         updateStage(
           'analyzing-competitors',
           'complete',
@@ -128,16 +165,16 @@ export async function POST(request: NextRequest) {
         updateStage(
           'generating-emails',
           'active',
-          'Crafting 6 bespoke email sequences...'
+          demo
+            ? 'Loading demo email sequences...'
+            : 'Crafting 6 bespoke email sequences...'
         )
 
-        const sequences = await generateEmailSequences(
-          profile,
-          research,
-          (_, preview) => {
-            send('stage-preview', { stage: 'generating-emails', preview })
-          }
-        )
+        const sequences = demo
+          ? await mockEmailSequences(profile)
+          : await generateEmailSequences(profile, research, (_, preview) => {
+              send('stage-preview', { stage: 'generating-emails', preview })
+            })
 
         updateStage(
           'generating-emails',
@@ -149,7 +186,7 @@ export async function POST(request: NextRequest) {
         updateStage(
           'compiling-report',
           'active',
-          'Compiling report and sending to Slack...'
+          'Compiling report...'
         )
 
         const report: FullReport = {
@@ -168,19 +205,33 @@ export async function POST(request: NextRequest) {
           console.error('PDF generation failed:', err)
         }
 
-        // Send to Slack
-        let slackResult: { ok: boolean; error?: string } = { ok: false, error: 'Skipped' }
-        try {
-          slackResult = await sendToSlack(
-            report,
-            profile.slackChannel || undefined,
-            pdfBuffer
-          )
-        } catch (err) {
-          console.error('Slack send failed:', err)
+        // Send to Slack (skip in demo mode if not configured)
+        let slackResult: { ok: boolean; error?: string } = {
+          ok: false,
+          error: 'Skipped',
+        }
+
+        if (isSlackConfigured()) {
+          try {
+            slackResult = await sendToSlack(
+              report,
+              profile.slackChannel || undefined,
+              pdfBuffer
+            )
+          } catch (err) {
+            console.error('Slack send failed:', err)
+            slackResult = {
+              ok: false,
+              error:
+                err instanceof Error ? err.message : 'Slack send failed',
+            }
+          }
+        } else {
           slackResult = {
             ok: false,
-            error: err instanceof Error ? err.message : 'Slack send failed',
+            error: demo
+              ? 'Demo mode — Slack delivery skipped (no SLACK_BOT_TOKEN configured)'
+              : 'Slack not configured',
           }
         }
 
@@ -191,6 +242,7 @@ export async function POST(request: NextRequest) {
           report,
           slackResult,
           hasPdf: !!pdfBuffer,
+          demoMode: demo,
         })
 
         controller.close()
