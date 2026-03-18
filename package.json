@@ -1,0 +1,43 @@
+{
+  "name": "cold-email-agent",
+  "version": "1.0.0",
+  "description": "AI Cold Email Agent - Generate bespoke cold email sequences with AI research",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:42053/git/joseph12341sg/Linkedin-Bot"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@react-pdf/renderer": "^4.3.2",
+    "@slack/web-api": "^7.15.0",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.27",
+    "clsx": "^2.1.1",
+    "formidable": "^3.5.4",
+    "lucide-react": "^0.577.0",
+    "next": "^14.2.35",
+    "pdf-parse": "^2.4.5",
+    "postcss": "^8.5.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/formidable": "^3.5.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/uuid": "^10.0.0"
+  }
+}
